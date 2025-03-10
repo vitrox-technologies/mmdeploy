@@ -256,6 +256,10 @@ class VoxelDetectionModel(BaseBackendModel):
                 data_samples=metas, data_instances_3d=data_instances_3d)
 
         else:
+            cls_score = cls_score[0]
+            bbox_pred = bbox_pred[0]
+            dir_cls_pred = dir_cls_pred[0]
+
             pts = model_cfg.model.test_cfg.pts
 
             rets = []

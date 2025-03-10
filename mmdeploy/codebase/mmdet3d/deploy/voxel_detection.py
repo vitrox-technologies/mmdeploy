@@ -9,30 +9,10 @@ from mmdet3d.structures import get_box_type
 from mmengine import Config
 from mmengine.dataset import Compose, pseudo_collate
 from mmengine.model import BaseDataPreprocessor
-from mmengine.registry import Registry
 
-from mmdeploy.codebase.base import CODEBASE, BaseTask, MMCodebase
-from mmdeploy.utils import Codebase, Task
-
-MMDET3D_TASK = Registry('mmdet3d_tasks')
-
-
-@CODEBASE.register_module(Codebase.MMDET3D.value)
-class MMDetection3d(MMCodebase):
-    """MMDetection3d codebase class."""
-
-    task_registry = MMDET3D_TASK
-
-    @classmethod
-    def register_deploy_modules(mmdet3d):
-        import mmdeploy.codebase.mmdet3d.models  # noqa: F401
-
-    @classmethod
-    def register_all_modules(mmdet3d):
-        from mmdet3d.utils.setup_env import register_all_modules
-
-        mmdet3d.register_deploy_modules()
-        register_all_modules(True)
+from mmdeploy.codebase.base import BaseTask
+from mmdeploy.utils import Task
+from .mmdet3d import MMDET3D_TASK
 
 
 def _get_dataset_metainfo(model_cfg: Config):

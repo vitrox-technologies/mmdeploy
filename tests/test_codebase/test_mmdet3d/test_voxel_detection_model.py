@@ -32,15 +32,15 @@ class TestVoxelDetectionModel:
         # simplify backend inference
         cls.wrapper = SwitchBackendWrapper(ORTWrapper)
         cls.outputs = {
-            'cls_score': torch.rand(1, 18, 32, 32),
-            'bbox_pred': torch.rand(1, 42, 32, 32),
-            'dir_cls_pred': torch.rand(1, 12, 32, 32)
+            'cls_score0': torch.rand(1, 18, 32, 32),
+            'bbox_pred0': torch.rand(1, 42, 32, 32),
+            'dir_cls_pred0': torch.rand(1, 12, 32, 32)
         }
         cls.wrapper.set(outputs=cls.outputs)
         deploy_cfg = mmengine.Config({
             'onnx_config': {
                 'input_names': ['voxels', 'num_points', 'coors'],
-                'output_names': ['cls_score', 'bbox_pred', 'dir_cls_pred'],
+                'output_names': ['cls_score0', 'bbox_pred0', 'dir_cls_pred0'],
                 'opset_version': 11
             },
             'backend_config': {
@@ -85,7 +85,7 @@ def test_build_voxel_detection_model():
         dict(
             backend_config=dict(type=Backend.ONNXRUNTIME.value),
             onnx_config=dict(
-                output_names=['cls_score', 'bbox_pred', 'dir_cls_pred']),
+                output_names=['cls_score0', 'bbox_pred0', 'dir_cls_pred0']),
             codebase_config=dict(type=Codebase.MMDET3D.value)))
 
     from mmdeploy.backend.onnxruntime import ORTWrapper
@@ -96,6 +96,8 @@ def test_build_voxel_detection_model():
         wrapper.set(model_cfg=model_cfg, deploy_cfg=deploy_cfg)
         from mmdeploy.codebase.mmdet3d.deploy.voxel_detection_model import (
             VoxelDetectionModel, build_voxel_detection_model)
-        voxeldetector = build_voxel_detection_model([''], model_cfg,
-                                                    deploy_cfg, 'cpu')
+        voxeldetector = build_voxel_detection_model([''],
+                                                    model_cfg=model_cfg,
+                                                    deploy_cfg=deploy_cfg,
+                                                    device='cpu')
         assert isinstance(voxeldetector, VoxelDetectionModel)

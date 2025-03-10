@@ -13,7 +13,8 @@ from mmengine.model import BaseDataPreprocessor
 from mmengine.registry import Registry
 
 from mmdeploy.codebase.base import CODEBASE, BaseTask, MMCodebase
-from mmdeploy.utils import Codebase, Task, get_input_shape, get_root_logger
+from mmdeploy.utils import (Codebase, Task, get_codebase_config,
+                            get_input_shape, get_root_logger)
 
 
 def process_model_config(
@@ -59,7 +60,7 @@ def process_model_config(
             type='Normalize',
             mean=data_preprocessor.mean,
             std=data_preprocessor.std,
-            to_rgb=data_preprocessor.bgr_to_rgb))
+            to_rgb=data_preprocessor.get('bgr_to_rgb', False)))
     test_pipeline.append(dict(type='ImageToTensor', keys=['img']))
     test_pipeline.append(
         dict(
@@ -208,10 +209,13 @@ class PoseDetection(BaseTask):
             img_path = [imgs]
         else:
             raise AssertionError('imgs must be strings or numpy arrays')
-        if isinstance(imgs, (list, tuple)) and isinstance(imgs[0], str):
-            img_path = imgs
-            img_data = [mmcv.imread(img) for img in imgs]
-            imgs = img_data
+        if isinstance(imgs, (list, tuple)):
+            if isinstance(imgs[0], str):
+                img_path = imgs
+                img_data = [mmcv.imread(img) for img in imgs]
+                imgs = img_data
+            else:
+                img_path = [''] * len(imgs)
         person_results = []
         bboxes = []
         for img in imgs:
@@ -362,6 +366,9 @@ class PoseDetection(BaseTask):
                 params['post_process'] = 'megvii'
                 params['modulate_kernel'] = self.model_cfg.kernel_sizes[-1]
             elif codec.type == 'SimCCLabel':
+                export_postprocess = get_codebase_config(self.deploy_cfg).get(
+                    'export_postprocess', False)
+                params['export_postprocess'] = export_postprocess
                 component = 'SimCCLabelDecode'
             elif codec.type == 'RegressionLabel':
                 component = 'DeepposeRegressionHeadDecode'

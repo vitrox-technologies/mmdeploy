@@ -7,6 +7,7 @@ from torch.onnx import symbolic_helper as sym_help
 from mmdeploy.core import FUNCTION_REWRITER, mark
 from mmdeploy.utils import IR, is_dynamic_batch
 from mmdeploy.utils.constants import Backend
+from .nms_match import multiclass_nms_match
 from .nms_rotated import multiclass_nms_rotated
 
 
@@ -242,7 +243,7 @@ def _select_nms_index(scores: torch.Tensor,
         pre_inds = pre_inds.unsqueeze(0).repeat(batch_size, 1)
         pre_inds = pre_inds.where((batch_inds == batch_template.unsqueeze(1)),
                                   pre_inds.new_zeros(1))
-        pre_inds = torch.cat((pre_inds, pre_inds.new_zeros((N, 1))), 1)
+        pre_inds = torch.cat((pre_inds, -pre_inds.new_ones((N, 1))), 1)
     # sort
     is_use_topk = keep_top_k > 0 and \
         (torch.onnx.is_in_onnx_export() or keep_top_k < batched_dets.shape[1])
@@ -258,7 +259,6 @@ def _select_nms_index(scores: torch.Tensor,
     if output_index:
         if pre_inds is not None:
             topk_inds = pre_inds[topk_batch_inds, topk_inds, ...]
-        topk_inds = topk_inds[:, :-1]
         return batched_dets, batched_labels, topk_inds
     # slice and recover the tensor
     return batched_dets, batched_labels
@@ -285,7 +285,7 @@ def _multiclass_nms(boxes: Tensor,
     iou_threshold = torch.tensor([iou_threshold], dtype=torch.float32)
     score_threshold = torch.tensor([score_threshold], dtype=torch.float32)
     batch_size = scores.shape[0]
-
+    topk_inds = None
     if pre_top_k > 0:
         max_scores, _ = scores.max(-1)
         _, topk_inds = max_scores.topk(pre_top_k)
@@ -368,8 +368,10 @@ def _multiclass_nms_single(boxes: Tensor,
         bbox_index = box_inds.unsqueeze(0)
         if pre_top_k > 0:
             bbox_index = pre_topk_inds[None, box_inds]
+        # pad index to keep same dim as dets and labels
+        bbox_index = torch.cat([bbox_index, -bbox_index.new_ones((1, 1))], 1)
         if keep_top_k > 0:
-            bbox_index = bbox_index[:, topk_inds[:-1]]
+            bbox_index = bbox_index[:, topk_inds]
         return dets, labels, bbox_index
     else:
         return dets, labels
@@ -530,6 +532,15 @@ def multiclass_nms(boxes: Tensor,
             score_threshold=score_threshold,
             pre_top_k=pre_top_k,
             keep_top_k=keep_top_k)
+    elif nms_type == 'nms_match':
+        return multiclass_nms_match(
+            boxes,
+            scores,
+            max_output_boxes_per_class=max_output_boxes_per_class,
+            iou_threshold=iou_threshold,
+            score_threshold=score_threshold,
+            pre_top_k=pre_top_k,
+            keep_top_k=keep_top_k)
     else:
         raise NotImplementedError(f'Unsupported nms type: {nms_type}.')
 
@@ -611,7 +622,6 @@ def multiclass_nms__torchscript(boxes: Tensor,
 
     Use batched_nms from torchvision instead of custom nms.
     """
-    assert not output_index, 'output_index is not supported on this backend.'
     # TODO: simplify inference for non-batch model
     from torchvision.ops import batched_nms
     batch_size = scores.shape[0]
@@ -619,11 +629,12 @@ def multiclass_nms__torchscript(boxes: Tensor,
     num_classes = scores.shape[2]
     box_per_cls = len(boxes.shape) == 4
     scores = torch.where(scores > score_threshold, scores, scores.new_zeros(1))
-
+    pre_topk_inds = None
     # pre-topk
     if pre_top_k > 0:
         max_scores, _ = scores.max(-1)
         _, topk_inds = max_scores.topk(pre_top_k)
+        pre_topk_inds = topk_inds
         batch_inds = torch.arange(batch_size).view(-1, 1).long()
         boxes = boxes[batch_inds, topk_inds, ...]
         scores = scores[batch_inds, topk_inds, :]
@@ -647,10 +658,14 @@ def multiclass_nms__torchscript(boxes: Tensor,
 
     keeps = torch.cat(keeps)
     scores = scores.permute(0, 2, 1)
-    dets, labels = _select_nms_index(
-        scores, boxes, keeps, batch_size, keep_top_k=keep_top_k)
-
-    return dets, labels
+    return _select_nms_index(
+        scores,
+        boxes,
+        keeps,
+        batch_size,
+        keep_top_k=keep_top_k,
+        pre_inds=pre_topk_inds,
+        output_index=output_index)
 
 
 class AscendBatchNMSOp(torch.autograd.Function):

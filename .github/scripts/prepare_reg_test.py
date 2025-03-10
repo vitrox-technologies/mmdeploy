@@ -70,19 +70,19 @@ def run_cmd(cmd_lines, log_path=None, raise_error=True):
 
 
 def prepare_codebases(codebases):
-    run_cmd(['python -m mim install "mmcv>=2.0.0"'])
     for codebase in codebases:
         full_name = REPO_NAMES[codebase]
         target_dir = os.path.join(MMDEPLOY_DIR, '..', full_name)
         branch = 'main'
-        if codebase in ['mmrotate', 'mmdet3d']:
-            branch = 'dev-1.x'
-        if not osp.exists(target_dir):
-            run_cmd([
-                'git clone --depth 1 ', f'-b {branch} '
-                f'https://github.com/open-mmlab/{full_name}.git '
-                f'{target_dir} '
-            ])
+        if codebase == 'mmrotate':
+            branch = 'v1.0.0rc1'
+        if osp.exists(target_dir):
+            shutil.rmtree(target_dir)
+        run_cmd([
+            'git clone --depth 1 ', f'-b {branch} '
+            f'https://github.com/open-mmlab/{full_name}.git '
+            f'{target_dir} '
+        ])
         run_cmd([
             'python -m mim install ',
             f'-r {target_dir}/requirements/mminstall.txt ',
@@ -98,6 +98,12 @@ def prepare_codebases(codebases):
                             f'{MMDEPLOY_DIR}/configs/mmyolo')
             shutil.copy(f'{target_dir}/tests/regression/mmyolo.yml',
                         f'{MMDEPLOY_DIR}/tests/regression/mmyolo.yml')
+        elif codebase == 'mmdet':
+            # for panoptic
+            run_cmd([
+                'python -m pip install ',
+                'git+https://github.com/cocodataset/panopticapi.git',
+            ])
 
 
 def install_torch(torch_version):
@@ -106,8 +112,12 @@ def install_torch(torch_version):
     tv = version.parse(torch_version)
     if tv < version.parse('1.10.0'):
         cuda_int = '111'
-    elif tv >= version.parse('1.13.0'):
+    elif tv < version.parse('1.13.0'):
+        cuda_int = '113'
+    elif tv < version.parse('2.0.0'):
         cuda_int = '117'
+    else:
+        cuda_int = '118'
 
     is_torch_v2 = tv >= version.parse('2.0.0')
     if is_torch_v2:
