@@ -420,13 +420,50 @@ def get_func_qualname(func: Callable) -> str:
     return _func_name
 
 
+def _walk_back_to_frame(top: int):
+    """Return the frame `top` levels above this call, without inspect.stack().
+
+    WHY THIS EXISTS, AND WHY inspect.stack() MUST NOT COME BACK HERE.
+
+    inspect.stack() builds a FrameInfo for EVERY frame it walks, not only the
+    one that gets indexed afterwards. Building a FrameInfo reads the frame's
+    line number and then computes `lineno - 1 - context // 2`.
+
+    Code obfuscated with pyarmor reports f_lineno as None. So if ANY obfuscated
+    frame sits anywhere below this call, inspect.stack() raises:
+
+        TypeError: unsupported operand type(s) for -: 'NoneType' and 'int'
+
+    The caller does not have to be the obfuscated one. A single obfuscated
+    frame further down the stack is enough, which is why excluding individual
+    files from obfuscation does not avoid this.
+
+    ViTrox ships VTE obfuscated and calls into mmdeploy's rewriters from it, so
+    this is a real failure and not a theoretical one: it broke ONNX export for
+    every training between 2026-08-26 and 2026-08-27.
+
+    These functions only ever need one frame, its globals and its code name.
+    Walking f_back gives exactly that and never touches a line number.
+
+    Index note: inspect.currentframe() here is this helper's own frame, so we
+    walk back `top` + 1 times to land where inspect.stack()[top] pointed when
+    called from the public functions below.
+    """
+    frame = inspect.currentframe().f_back
+    for _ in range(top):
+        frame = frame.f_back
+    return frame
+
+
 def get_frame_func(top: int = 1) -> Callable:
-    """get func of frame."""
-    frameinfo = inspect.stack()[top]
-    frame = frameinfo.frame
+    """get func of frame.
+
+    DO NOT reintroduce inspect.stack() here. See _walk_back_to_frame.
+    """
+    frame = _walk_back_to_frame(top)
 
     g_vars = frame.f_globals
-    func_name = frameinfo.function
+    func_name = frame.f_code.co_name
     assert func_name in g_vars, \
         f'Can not find function: {func_name} in global.'
     func = g_vars[func_name]
@@ -434,12 +471,14 @@ def get_frame_func(top: int = 1) -> Callable:
 
 
 def get_frame_qualname(top: int = 1) -> str:
-    """get frame name."""
-    frameinfo = inspect.stack()[top]
-    frame = frameinfo.frame
+    """get frame name.
+
+    DO NOT reintroduce inspect.stack() here. See _walk_back_to_frame.
+    """
+    frame = _walk_back_to_frame(top)
 
     g_vars = frame.f_globals
-    func_name = frameinfo.function
+    func_name = frame.f_code.co_name
     assert func_name in g_vars, \
         f'Can not find function: {func_name} in global.'
     func = g_vars[func_name]
