@@ -482,7 +482,15 @@ def get_frame_qualname(top: int = 1) -> str:
     assert func_name in g_vars, \
         f'Can not find function: {func_name} in global.'
     func = g_vars[func_name]
-    module_name = inspect.getmodule(func).__name__
+
+    # Second obfuscation hazard, separate from the frame walk above. `func`
+    # comes from the CALLER's globals, so it can be obfuscated code, and
+    # inspect.getmodule returns None for that. `.__name__` on None then raises
+    # AttributeError. Fall back to the function's own __module__, which pyarmor
+    # preserves, and only then to the frame's module name.
+    module = inspect.getmodule(func)
+    module_name = getattr(module, '__name__', None) or getattr(
+        func, '__module__', None) or frame.f_globals.get('__name__', '<unknown>')
 
     return f'{module_name}.{func_name}'
 
