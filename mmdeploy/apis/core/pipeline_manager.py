@@ -336,8 +336,15 @@ class PipelineManager:
 
             # save the implementation into the registry module
             impl_name = f'_pipe_{func.__name__}__impl_'
-            frame = inspect.stack()[1]
-            outer_mod = inspect.getmodule(frame[0])
+            # inspect.stack() builds a FrameInfo for every frame in the walk,
+            # and that reads each frame's line number. A pyarmor-obfuscated
+            # frame reports f_lineno as None, so getframeinfo raises
+            # "unsupported operand type(s) for -: 'NoneType' and 'int'" when an
+            # obfuscated caller is anywhere below this decorator. Only the
+            # immediate caller is needed here, and it is always the mmdeploy
+            # module applying the decorator, so read that frame directly.
+            frame = inspect.currentframe().f_back
+            outer_mod = inspect.getmodule(frame)
             mod_name = outer_mod.__name__
             setattr(outer_mod, impl_name, func)
 

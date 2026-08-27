@@ -18,10 +18,10 @@ concurrency:
 
 jobs:
   build_sdk_demo:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        python-version: [3.7]
+        python-version: [3.7.17]
     steps:
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v2

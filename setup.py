@@ -1,7 +1,7 @@
 import os
 
 from pkg_resources import parse_version
-from setuptools import find_packages, setup
+from setuptools import find_namespace_packages, setup
 
 EXT_TYPE = ''
 try:
@@ -181,8 +181,36 @@ def get_extensions():
 
 
 if __name__ == '__main__':
+    # PACKAGING NOTES FOR THIS FORK. Read before changing anything below.
+    #
+    # This branch builds the `mmdeploy_vitrox` distribution that VTE depends on.
+    # Until 2026-08-27 the distribution name and the package list were NOT in
+    # this file: whoever published mmdeploy_vitrox 1.3.1 to PyPI in March 2025
+    # edited setup.py locally and did not commit it. The published wheel was
+    # therefore not reproducible from this repository, and when that engineer
+    # left, nobody could rebuild it. Both edits are committed now so the wheel
+    # can be rebuilt by anyone. Do not move them back out of version control.
+    #
+    # Two more things this build depends on, neither of which is expressible
+    # here, so they are written down instead:
+    #
+    #   1. torch MUST NOT be installed in the build environment. Above, this
+    #      file sets EXT_TYPE='torch' when `import torch` succeeds and then
+    #      compiles ts_optimizer, which yields a platform-specific wheel. VTE
+    #      needs the pure-Python `py3-none-any` wheel, because it stopped using
+    #      mmdeploy's compiled ops in favour of onnxruntime_extensions. Absence
+    #      of torch is the only switch; there is no flag.
+    #   2. Build with setuptools==75.1.0. Newer setuptools dropped
+    #      pkg_resources, which this file imports at module level, so the build
+    #      fails outright. That version also matches the published wheel.
+    #
+    # Verified recipe:
+    #   uv venv --python 3.10 bldvenv
+    #   VIRTUAL_ENV=bldvenv uv pip install "setuptools==75.1.0" wheel build \
+    #       cython numpy packaging
+    #   bldvenv/bin/python -m build --wheel --no-isolation --outdir dist .
     setup(
-        name='mmdeploy',
+        name='mmdeploy_vitrox',
         version=get_version(),
         description='OpenMMLab Model Deployment',
         long_description=readme(),
@@ -191,7 +219,11 @@ if __name__ == '__main__':
         author_email='openmmlab@gmail.com',
         keywords='computer vision, model deployment',
         url='https://github.com/open-mmlab/mmdeploy',
-        packages=find_packages(exclude=('configs', 'tools')),
+        # find_namespace_packages, not find_packages: mmdeploy/codebase/mmrazor/
+        # has no __init__.py, so plain find_packages cannot reach
+        # mmdeploy.codebase.mmrazor.deploy underneath it. The published 1.3.1
+        # wheel ships those files, so its build had this change too.
+        packages=find_namespace_packages(include=['mmdeploy', 'mmdeploy.*']),
         include_package_data=True,
         classifiers=[
             'Development Status :: 3 - Alpha',
