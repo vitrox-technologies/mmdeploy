@@ -425,9 +425,9 @@ def _walk_back_to_frame(top: int):
 
     WHY THIS EXISTS, AND WHY inspect.stack() MUST NOT COME BACK HERE.
 
-    inspect.stack() builds a FrameInfo for EVERY frame it walks, not only the
-    one that gets indexed afterwards. Building a FrameInfo reads the frame's
-    line number and then computes `lineno - 1 - context // 2`.
+    inspect.stack() builds a FrameInfo for EVERY frame it walks. Indexing the
+    result afterwards does nothing to limit that work. Building a FrameInfo
+    reads the frame's line number and computes `lineno - 1 - context // 2`.
 
     Code obfuscated with pyarmor reports f_lineno as None. So if ANY obfuscated
     frame sits anywhere below this call, inspect.stack() raises:
